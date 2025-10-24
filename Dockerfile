@@ -3,9 +3,7 @@ FROM python:3.8-slim-buster
 WORKDIR /app
 COPY . /app
 
-# FIX & INSTALL: Combine ALL package updates and installations into a single RUN instruction.
-# This resolves the "unknown instruction" error by removing the need for a second RUN command
-# immediately after the multi-line repository fix block.
+
 RUN # 1. FIX: Update the Debian package source list to point to the archive server (for Buster).
     sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list \
     && sed -i 's/security.debian.org/archive.debian.org/g' /etc/apt/sources.list \
