@@ -1,28 +1,28 @@
-# Stage 1: Build & Dependencies
-FROM python:3.8-slim-buster
+# Dockerfile
+
+# Stage 1: Use a reliable base image
+FROM python:3.10-slim-buster 
+
+# Set environment variables for non-interactive installs
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Security: Create a non-root user and switch to it
-# This step ensures the application runs with limited permissions
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser
 
 # Set working directory
 WORKDIR /app
 
-# Efficiency: Copy only requirements.txt first to leverage Docker's build cache
+# Efficiency: Copy requirements first to leverage build cache
 COPY requirements.txt .
 
 # Install Python dependencies
-# Use --no-cache-dir to prevent caching pip files, further reducing image size
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Temporarily switch back to root for installing system dependencies
-# This is necessary for apt-get permissions.
+# Temporarily switch back to root for installing system dependencies (e.g., ffmpeg components)
 USER root
 
-# Install system dependencies (including awscli and ffmpeg components)
-# The fix for your error is here: USER root must be on its own line before RUN.
-# We also combine all apt commands and cleanup into one layer to minimize image size.
+# Install system dependencies and perform cleanup in a single RUN layer
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
         awscli \
@@ -33,11 +33,14 @@ RUN apt-get update -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Switch back to the non-root user (appuser) before running the application
+# Switch back to the non-root user for running the app
 USER appuser
 
-# Copy application code (ensure a .dockerignore file is present)
+# Copy the rest of the application code
 COPY . .
 
-# Start the application
+# Expose the port the application runs on (Hypothetical web app)
+EXPOSE 8000
+
+# Command to run the application
 CMD ["python3", "app.py"]
