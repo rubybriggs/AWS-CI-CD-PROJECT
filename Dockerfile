@@ -1,28 +1,29 @@
 # Dockerfile
 
-# Stage 1: Use a reliable base image
-FROM python:3.10-slim-buster 
+# Use a newer, supported Debian distribution (Bullseye) to avoid repository 404 errors.
+FROM python:3.10-slim-bullseye 
 
-# Set environment variables for non-interactive installs
+# Set environment variables for non-interactive installs, a good practice for Debian.
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Security: Create a non-root user and switch to it
+# Security: Create a non-root user and switch to it.
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser
 
-# Set working directory
+# Set working directory.
 WORKDIR /app
 
-# Efficiency: Copy requirements first to leverage build cache
+# Efficiency: Copy requirements first to leverage Docker's build cache.
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies. Use --no-cache-dir to keep the image slim.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Temporarily switch back to root for installing system dependencies (e.g., ffmpeg components)
+# Temporarily switch back to root for installing system dependencies (apt-get requires root).
 USER root
 
-# Install system dependencies and perform cleanup in a single RUN layer
+# Install system dependencies and perform cleanup in a single RUN layer.
+# This minimizes the image size by immediately removing package lists and temporary files.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
         awscli \
@@ -33,14 +34,15 @@ RUN apt-get update -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Switch back to the non-root user for running the app
+# Switch back to the non-root user (appuser) before running the application.
 USER appuser
 
-# Copy the rest of the application code
+# Copy the rest of the application code.
 COPY . .
 
-# Expose the port the application runs on (Hypothetical web app)
+# Expose the application port (Hypothetical, adjust as needed).
 EXPOSE 8000
 
-# Command to run the application
+# Command to run the application.
 CMD ["python3", "app.py"]
+
