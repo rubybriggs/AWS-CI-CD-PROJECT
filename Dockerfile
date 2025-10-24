@@ -1,17 +1,29 @@
-# Using the old Buster image as requested.
 FROM python:3.8-slim-buster
 
 WORKDIR /app
 COPY . /app
 
-# FIX: Update the Debian package source list to point to the archive server.
-# Buster is now old-stable, and its packages have been moved. This command
-# manually redirects the repository URLs to the archive server, resolving
-# the "does not have a Release file" error (Exit Code 100).
-…        libxext6 \
+# FIX & INSTALL: Combine ALL package updates and installations into a single RUN instruction.
+# This resolves the "unknown instruction" error by removing the need for a second RUN command
+# immediately after the multi-line repository fix block.
+RUN # 1. FIX: Update the Debian package source list to point to the archive server (for Buster).
+    sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list \
+    && sed -i 's/security.debian.org/archive.debian.org/g' /etc/apt/sources.list \
+    && echo "deb http://security.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list \
+    \
+    # 2. Update and Install packages
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        awscli \
+        ffmpeg \
+        libsm6 \
+        libxext6 \
         unzip \
+    \
+    # 3. Install Python requirements
     && pip install --no-cache-dir -r requirements.txt \
-    # Cleanup to reduce image size
+    \
+    # 4. Cleanup to reduce image size
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
