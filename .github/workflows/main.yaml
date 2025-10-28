@@ -29,9 +29,6 @@ jobs:
     name: Continuous Delivery
     needs: integration
     runs-on: ubuntu-latest
-    # Define the output that this job will pass to subsequent jobs
-    outputs:
-      image_uri: ${{ steps.set-image-uri.outputs.image_uri }} # <-- UPDATED: Changed step ID here
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -40,50 +37,38 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
-      
-      # NOTE: Ensure AWS_REGION secret matches us-east-1 if using that region in the step below.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1 # Hardcoding region where ECR repository is expected
+          aws-region: us-east-1
 
       - name: Create ECR repository if missing
         run: |
-          REPO_NAME="studentsperformance" 
-          # Ensure region is specified for AWS CLI commands
-          aws ecr describe-repositories --repository-names $REPO_NAME --region us-east-1 || \
-          aws ecr create-repository --repository-name $REPO_NAME --region us-east-1
+          REPO_NAME="studentsperformance"  
+          aws ecr describe-repositories --repository-names $REPO_NAME || \
+          aws ecr create-repository --repository-name $REPO_NAME
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build and push image to Amazon ECR
-        id: build-and-push # <-- NEW ID for the push step
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: studentsperformance
           IMAGE_TAG: latest
         run: |
-          # Build a docker container
+          # Build a docker container and
+          # push it to ECR so that it can
+          # be deployed to ECS.
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          # Push the built image to ECR
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      # NEW STEP: Dedicated step to reliably set the output
-      - name: Set Image URI Output
-        id: set-image-uri # <-- NEW ID for the output step
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: studentsperformance
-          IMAGE_TAG: latest
-        run: |
-          # This command is now guaranteed to run as the final, dedicated output step
-          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          
+          
   Continuous-Deployment:
     needs: build-and-push-ecr-image
     runs-on: self-hosted
@@ -96,38 +81,24 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          # IMPORTANT: Must use the region where the image was pushed (e.g., us-east-1)
-          aws-region: ${{ secrets.AWS_REGION }} 
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-
-
-     # FIX: Injected the image URI directly into the run step as a shell variable
+      
+      
       - name: Pull latest images
         run: |
-          IMAGE_URI="${{ needs.build-and-push-ecr-image.outputs.image_uri }}"
-          echo "Attempting to pull image: $IMAGE_URI"
-          # This command will now use the correct, full URI
-          docker pull "$IMAGE_URI"
-
-      - name: Stop and remove container if running
-        run: |
-          # Check if container 'mltest' is running or exists and forcibly stop/remove it
-          if docker ps -a --format '{{.Names}}' | grep -q '^mltest$'; then
-              echo "Stopping and removing existing container 'mltest'."
-              docker stop mltest && docker rm -fv mltest
-          else
-              echo "Container 'mltest' not found. Proceeding with run."
-          fi
-          
-         # FIX: Injected the image URI directly into the run step as a shell variable
+         docker pull ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+         
+      # - name: Stop and remove  container if running
+      #   run: |
+      #    docker ps -q --filter "name=mltest" | grep -q . && docker stop mltest && docker rm -fv mltest
+       
       - name: Run Docker Image to serve users
         run: |
-          IMAGE_URI="${{ needs.build-and-push-ecr-image.outputs.image_uri }}"
-          docker run -d -p 8080:8080 --ipc="host" --name=mltest -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}' "$IMAGE_URI"
-      
+         docker run -d -p 8080:8080 --ipc="host" --name=mltest -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}'  ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
       - name: Clean previous images and containers
         run: |
-          docker system prune -f
+         docker system prune -f
