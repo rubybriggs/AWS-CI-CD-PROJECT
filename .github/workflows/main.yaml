@@ -90,7 +90,8 @@ jobs:
       
       - name: Pull latest images
         run: |
-          docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+          docker pull 592444418608.dkr.ecr.us-east-1.amazonaws.com/studentsperformance
+
          
       # - name: Stop and remove  container if running
       #   run: |
