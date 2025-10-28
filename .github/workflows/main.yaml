@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     # Define the output that this job will pass to subsequent jobs
     outputs:
-      image_uri: ${{ steps.build-image.outputs.image_uri }}
+      image_uri: ${{ steps.set-image-uri.outputs.image_uri }} # <-- UPDATED: Changed step ID here
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -60,8 +60,8 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push image to Amazon ECR
-        id: build-image
+      - name: Build and push image to Amazon ECR
+        id: build-and-push # <-- NEW ID for the push step
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: studentsperformance
@@ -71,14 +71,22 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           # Push the built image to ECR
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          # Export the full image URI to be used by the deployment job
+
+      # NEW STEP: Dedicated step to reliably set the output
+      - name: Set Image URI Output
+        id: set-image-uri # <-- NEW ID for the output step
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: studentsperformance
+          IMAGE_TAG: latest
+        run: |
+          # This command is now guaranteed to run as the final, dedicated output step
           echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
 
   Continuous-Deployment:
     needs: build-and-push-ecr-image
     runs-on: self-hosted
-    # REMOVED: env: IMAGE_URI: ${{ needs.build-and-push-ecr-image.outputs.image_uri }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -94,9 +102,9 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-      
-      
-      # FIX: Injected the image URI directly into the run step as a shell variable
+
+
+     # FIX: Injected the image URI directly into the run step as a shell variable
       - name: Pull latest images
         run: |
           IMAGE_URI="${{ needs.build-and-push-ecr-image.outputs.image_uri }}"
@@ -113,8 +121,8 @@ jobs:
           else
               echo "Container 'mltest' not found. Proceeding with run."
           fi
-        
-      # FIX: Injected the image URI directly into the run step as a shell variable
+          
+         # FIX: Injected the image URI directly into the run step as a shell variable
       - name: Run Docker Image to serve users
         run: |
           IMAGE_URI="${{ needs.build-and-push-ecr-image.outputs.image_uri }}"
@@ -123,8 +131,3 @@ jobs:
       - name: Clean previous images and containers
         run: |
           docker system prune -f
-
-
-
-
-         
