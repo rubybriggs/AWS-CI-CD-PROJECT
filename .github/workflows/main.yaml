@@ -33,7 +33,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install Utilities
+      - name: Install Utilities 
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
@@ -90,7 +90,7 @@ jobs:
       
       - name: Pull latest images
         run: |
-         docker pull ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+         run: docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
          
       # - name: Stop and remove  container if running
       #   run: |
@@ -102,3 +102,4 @@ jobs:
       - name: Clean previous images and containers
         run: |
          docker system prune -f
+
