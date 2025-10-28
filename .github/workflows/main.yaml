@@ -78,9 +78,7 @@ jobs:
   Continuous-Deployment:
     needs: build-and-push-ecr-image
     runs-on: self-hosted
-    # Pull the image URI directly from the dependency job's output
-    env:
-      IMAGE_URI: ${{ needs.build-and-push-ecr-image.outputs.image_uri }}
+    # REMOVED: env: IMAGE_URI: ${{ needs.build-and-push-ecr-image.outputs.image_uri }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -98,12 +96,13 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       
       
-      # CORRECTED: Uses the IMAGE_URI environment variable from the previous job output
+      # FIX: Injected the image URI directly into the run step as a shell variable
       - name: Pull latest images
         run: |
+          IMAGE_URI="${{ needs.build-and-push-ecr-image.outputs.image_uri }}"
           echo "Attempting to pull image: $IMAGE_URI"
-          # This command will now use the correct, full URI, e.g., '123...ecr...com/studentsperformance:latest'
-          docker pull $IMAGE_URI
+          # This command will now use the correct, full URI
+          docker pull "$IMAGE_URI"
 
       - name: Stop and remove container if running
         run: |
@@ -115,10 +114,11 @@ jobs:
               echo "Container 'mltest' not found. Proceeding with run."
           fi
         
-      # CORRECTED: Uses the IMAGE_URI environment variable from the previous job output
+      # FIX: Injected the image URI directly into the run step as a shell variable
       - name: Run Docker Image to serve users
         run: |
-          docker run -d -p 8080:8080 --ipc="host" --name=mltest -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}' $IMAGE_URI
+          IMAGE_URI="${{ needs.build-and-push-ecr-image.outputs.image_uri }}"
+          docker run -d -p 8080:8080 --ipc="host" --name=mltest -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}' "$IMAGE_URI"
       
       - name: Clean previous images and containers
         run: |
