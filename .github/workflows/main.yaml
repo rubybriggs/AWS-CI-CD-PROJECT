@@ -46,7 +46,7 @@ jobs:
 
       - name: Create ECR repository if missing
         run: |
-          REPO_NAME="studentsperformance"  
+          REPO_NAME="studentsperformance:latest"  
           aws ecr describe-repositories --repository-names $REPO_NAME || \
           aws ecr create-repository --repository-name $REPO_NAME
 
@@ -58,7 +58,7 @@ jobs:
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: studentsperformance
+          ECR_REPOSITORY: studentsperformance:latest
           IMAGE_TAG: latest
         run: |
           # Build a docker container and
@@ -102,3 +102,8 @@ jobs:
       - name: Clean previous images and containers
         run: |
          docker system prune -f
+
+
+
+
+         
